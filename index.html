@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Шутер с Локальным Изображением Игрока и Врага</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: black;
+      font-family: sans-serif;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+      margin: auto;
+      background: #111;
+      border: 2px solid #4CAF50;
+    }
+  </style>
+</head>
+<body>
+<canvas id="game" width="480" height="640"></canvas>
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+const playerSize = 30;
+const enemySize = 30;
+let score = 0;
+let lives = 3;
+
+const player = {
+  x: canvas.width / 2 - playerSize / 2,
+  y: canvas.height - playerSize - 30,
+  width: playerSize,
+  height: playerSize,
+  speed: 4,
+  cooldown: 0
+};
+
+const bullets = [];
+const enemyBullets = [];
+const enemies = [];
+
+const keys = {};
+document.addEventListener("keydown", e => keys[e.key] = true);
+document.addEventListener("keyup", e => keys[e.key] = false);
+
+// Загружаем локальное изображение игрока
+const playerImg = new Image();
+playerImg.src = "image/image.png";  // путь к картинке игрока
+
+// Загружаем локальное изображение врага
+const enemyImg = new Image();
+enemyImg.src = "image/image copy.png";  // путь к картинке врага
+
+function shoot() {
+  if (player.cooldown <= 0) {
+    bullets.push({
+      x: player.x + player.width / 2 - 2,
+      y: player.y,
+      width: 4,
+      height: 10,
+      speed: 7
+    });
+    player.cooldown = 10;
+  }
+}
+
+function spawnEnemy() {
+  enemies.push({
+    x: Math.random() * (canvas.width - enemySize),
+    y: -enemySize,
+    width: enemySize,
+    height: enemySize,
+    speed: 1.5 + Math.random() * 1.5,
+    cooldown: Math.floor(Math.random() * 100) + 50
+  });
+}
+
+function enemyShoot(enemy) {
+  enemyBullets.push({
+    x: enemy.x + enemy.width / 2 - 2,
+    y: enemy.y + enemy.height,
+    width: 4,
+    height: 10,
+    speed: 3
+  });
+}
+
+function drawPlayer() {
+  if (playerImg.complete) {
+    ctx.drawImage(playerImg, player.x, player.y, player.width, player.height);
+  } else {
+    ctx.fillStyle = "cyan";
+    ctx.beginPath();
+    ctx.arc(player.x + player.width / 2, player.y + player.height / 2, player.width / 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawEnemies() {
+  enemies.forEach(e => {
+    if (enemyImg.complete) {
+      ctx.drawImage(enemyImg, e.x, e.y, e.width, e.height);
+    } else {
+      ctx.fillStyle = "red";
+      ctx.fillRect(e.x, e.y, e.width, e.height);
+    }
+  });
+}
+
+function drawBullets(arr, color) {
+  ctx.fillStyle = color;
+  arr.forEach(b => ctx.fillRect(b.x, b.y, b.width, b.height));
+}
+
+function drawHUD() {
+  ctx.fillStyle = "white";
+  ctx.font = "18px Arial";
+  ctx.fillText("Счёт: " + score, 10, 20);
+  ctx.fillText("Жизни: " + lives, 10, 40);
+}
+
+function collision(a, b) {
+  return (
+    a.x < b.x + b.width &&
+    a.x + a.width > b.x &&
+    a.y < b.y + b.height &&
+    a.y + a.height > b.y
+  );
+}
+
+function update() {
+  let dx = 0, dy = 0;
+  if (keys["ArrowLeft"] || keys["a"]) dx = -1;
+  if (keys["ArrowRight"] || keys["d"]) dx = 1;
+  if (keys["ArrowUp"] || keys["w"]) dy = -1;
+  if (keys["ArrowDown"] || keys["s"]) dy = 1;
+
+  const len = Math.hypot(dx, dy);
+  if (len > 0) {
+    dx /= len;
+    dy /= len;
+  }
+
+  player.x += dx * player.speed;
+  player.y += dy * player.speed;
+
+  player.x = Math.max(0, Math.min(canvas.width - player.width, player.x));
+  player.y = Math.max(0, Math.min(canvas.height - player.height, player.y));
+
+  if (keys[" "] || keys["Spacebar"]) shoot();
+  if (player.cooldown > 0) player.cooldown--;
+
+  bullets.forEach((b, i) => {
+    b.y -= b.speed;
+    if (b.y < 0) bullets.splice(i, 1);
+  });
+
+  enemyBullets.forEach((b, i) => {
+    b.y += b.speed;
+    if (b.y > canvas.height) enemyBullets.splice(i, 1);
+    if (collision(b, player)) {
+      lives--;
+      enemyBullets.splice(i, 1);
+      if (lives <= 0) gameOver();
+    }
+  });
+
+  enemies.forEach((e, i) => {
+    e.y += e.speed;
+    e.cooldown--;
+    if (e.cooldown <= 0) {
+      enemyShoot(e);
+      e.cooldown = Math.floor(Math.random() * 100) + 60;
+    }
+
+    if (collision(e, player)) {
+      enemies.splice(i, 1);
+      lives--;
+      if (lives <= 0) gameOver();
+    }
+
+    bullets.forEach((b, j) => {
+      if (collision(b, e)) {
+        bullets.splice(j, 1);
+        enemies.splice(i, 1);
+        score++;
+      }
+    });
+
+    if (e.y > canvas.height) enemies.splice(i, 1);
+  });
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawPlayer();
+  drawBullets(bullets, "yellow");
+  drawBullets(enemyBullets, "orange");
+  drawEnemies();
+  drawHUD();
+}
+
+function gameOver() {
+  alert("💥 Игра окончена! Счёт: " + score);
+  document.location.reload();
+}
+
+function gameLoop() {
+  update();
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+
+setInterval(spawnEnemy, 1200);
+gameLoop();
+</script>
+</body>
+</html>
